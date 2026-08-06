@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetworkSecurity — Phishing URL Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080b0f;
+    --panel:#0e141b;
+    --panel-2:#0b1015;
+    --line:#1b2530;
+    --line-soft:#141c25;
+    --text:#e4ecf1;
+    --muted:#7488a0;
+    --muted-dim:#4c5c6e;
+    --accent:#3ee08c;
+    --accent-soft:rgba(62,224,140,0.12);
+    --danger:#ff6a6a;
+    --amber:#ffb454;
+    --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+    --sans:"Inter","Segoe UI",system-ui,sans-serif;
+    --display:"Space Grotesk","Inter",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  ::selection{background:var(--accent-soft); color:var(--accent);}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    position:relative;
+  }
+  .bg-grid{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(to right, var(--line-soft) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line-soft) 1px, transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(ellipse 70% 55% at 30% 0%, #000 0%, transparent 75%);
+            mask-image:radial-gradient(ellipse 70% 55% at 30% 0%, #000 0%, transparent 75%);
+  }
+
+  header{
+    position:relative; z-index:1;
+    padding:26px 6vw;
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
+    backdrop-filter:blur(6px);
+  }
+  .brand{display:flex; align-items:center; gap:11px;}
+  .brand .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-soft), 0 0 14px var(--accent);
+    animation:pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .brand h1{font-family:var(--mono); font-size:14px; letter-spacing:.1em; margin:0; text-transform:uppercase; color:var(--muted); font-weight:500;}
+  .brand h1 b{color:var(--text); font-weight:500;}
+  .brand h1 span{color:var(--accent);}
+  nav{display:flex; align-items:center; gap:26px;}
+  nav a{
+    font-family:var(--mono); font-size:11.5px; color:var(--muted); text-decoration:none;
+    letter-spacing:.06em; text-transform:uppercase; transition:.15s;
+  }
+  nav a:hover{color:var(--accent);}
+
+  main{position:relative; z-index:1; max-width:1040px; margin:0 auto; padding:72px 6vw 90px;}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; color:var(--accent);
+    letter-spacing:.16em; text-transform:uppercase; margin-bottom:18px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{content:""; width:22px; height:1px; background:var(--accent); opacity:.6;}
+
+  h2{
+    font-family:var(--display); font-size:clamp(32px,4.4vw,50px); line-height:1.1; margin:0 0 20px;
+    font-weight:600; letter-spacing:-.015em; max-width:14ch;
+  }
+  .lede{color:var(--muted); font-size:16px; line-height:1.65; max-width:52ch; margin-bottom:20px;}
+
+  /* signature element: packet flow strip */
+  .flow{
+    display:flex; align-items:center; gap:0; margin:36px 0 52px;
+    font-family:var(--mono); font-size:11px; color:var(--muted-dim);
+  }
+  .flow .node{
+    padding:6px 12px; border:1px solid var(--line); border-radius:5px; background:var(--panel-2);
+    white-space:nowrap;
+  }
+  .flow .node.on{color:var(--accent); border-color:rgba(62,224,140,.35); background:var(--accent-soft);}
+  .flow .wire{
+    flex:0 0 26px; height:1px; background:var(--line); position:relative; overflow:visible;
+  }
+  .flow .wire::after{
+    content:""; position:absolute; top:-1.5px; left:-4px; width:4px; height:4px; border-radius:50%;
+    background:var(--accent); box-shadow:0 0 6px var(--accent);
+    animation:travel 2.4s linear infinite;
+  }
+  .flow .wire:nth-child(2)::after{animation-delay:0s;}
+  .flow .wire:nth-child(4)::after{animation-delay:.6s;}
+  .flow .wire:nth-child(6)::after{animation-delay:1.2s;}
+  .flow .wire:nth-child(8)::after{animation-delay:1.8s;}
+  @keyframes travel{
+    0%{left:-4px; opacity:0;}
+    10%{opacity:1;}
+    90%{opacity:1;}
+    100%{left:calc(100% - 0px); opacity:0;}
+  }
+
+  .grid2{display:grid; grid-template-columns:1.15fr .85fr; gap:22px; align-items:start;}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr;} .flow{flex-wrap:wrap; row-gap:8px;}}
+
+  .panel{
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line); border-radius:12px;
+    padding:30px; position:relative; overflow:hidden;
+  }
+  .panel::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(62,224,140,.5), transparent);
+  }
+  .panel h3{
+    font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--muted); margin:0 0 22px; display:flex; align-items:center; gap:9px; font-weight:500;
+  }
+  .panel h3 .idx{color:var(--accent);}
+
+  .dropzone{
+    border:1.5px dashed var(--line); border-radius:9px; padding:38px 20px;
+    text-align:center; cursor:pointer; transition:.18s; position:relative; display:block;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent); background:var(--accent-soft);}
+  .dropzone input{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;}
+  .dropzone svg{width:26px; height:26px; margin-bottom:12px; stroke:var(--muted-dim); transition:.18s;}
+  .dropzone:hover svg, .dropzone.drag svg{stroke:var(--accent);}
+  .dropzone p{margin:0; color:var(--muted); font-size:13.5px;}
+  .dropzone .filename{color:var(--accent); font-family:var(--mono); font-size:12.5px; margin-top:12px; word-break:break-all;}
+
+  .row{display:flex; gap:12px; margin-top:22px; flex-wrap:wrap;}
+  button, .btn{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.03em;
+    padding:12px 20px; border-radius:7px; border:1px solid transparent;
+    cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+    transition:.15s; font-weight:500;
+  }
+  .primary{background:var(--accent); color:#062314;}
+  .primary:hover{background:#5eeaa3; box-shadow:0 0 22px rgba(62,224,140,.25);}
+  .primary:disabled{opacity:.4; cursor:not-allowed; box-shadow:none;}
+  .ghost{background:transparent; border-color:var(--line); color:var(--muted);}
+  .ghost:hover{border-color:var(--accent); color:var(--text);}
+  .ghost:disabled{opacity:.4; cursor:not-allowed;}
+
+  .status{
+    font-family:var(--mono); font-size:12px; margin-top:16px; padding:11px 14px;
+    border-radius:7px; display:none; align-items:center; gap:9px; border:1px solid transparent;
+  }
+  .status.show{display:flex;}
+  .status.busy{background:rgba(116,136,160,0.08); color:var(--muted); border-color:var(--line);}
+  .status.err{background:rgba(255,106,106,0.08); color:var(--danger); border-color:rgba(255,106,106,.25);}
+  .status.ok{background:var(--accent-soft); color:var(--accent); border-color:rgba(62,224,140,.25);}
+
+  .spinner{
+    width:11px;height:11px;border-radius:50%; flex:0 0 auto;
+    border:2px solid currentColor; border-top-color:transparent; opacity:.8;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .metric{font-family:var(--mono); padding:14px 0; border-bottom:1px solid var(--line-soft);}
+  .metric:last-of-type{border-bottom:none;}
+  .metric .k{color:var(--muted-dim); font-size:11px; text-transform:uppercase; letter-spacing:.07em;}
+  .metric .v{color:var(--text); font-size:13.5px; margin-top:6px; line-height:1.5;}
+  .metric .v.accent{color:var(--accent);}
+
+  #resultWrap{margin-top:20px; display:none;}
+  #resultWrap.show{display:block;}
+  #resultWrap h4{font-family:var(--mono); font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin:0 0 12px;}
+  .table-scroll{max-height:340px; overflow:auto; border:1px solid var(--line); border-radius:8px;}
+  table.result-table{border-collapse:collapse; width:100%; font-family:var(--mono); font-size:12px;}
+  table.result-table th{
+    position:sticky; top:0; background:var(--panel-2); color:var(--muted);
+    text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-weight:500; white-space:nowrap;
+  }
+  table.result-table td{padding:8px 12px; border-bottom:1px solid var(--line-soft); color:var(--text); white-space:nowrap;}
+  table.result-table tr:last-child td{border-bottom:none;}
+
+  footer{
+    position:relative; z-index:1;
+    border-top:1px solid var(--line); padding:24px 6vw; margin-top:20px;
+    font-family:var(--mono); font-size:11px; color:var(--muted-dim);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <h1><b>Network</b><span>Security</span> // console</h1>
+  </div>
+  <nav>
+    <a href="/docs">API docs</a>
+    <a href="#" id="trainLink">Retrain model</a>
+  </nav>
+</header>
+
+<main>
+  <div class="eyebrow">Phishing URL Classifier</div>
+  <h2>Upload a batch of URLs.<br>Get a verdict on each one.</h2>
+  <p class="lede">
+    Runs the trained model on your CSV of extracted URL features and flags
+    every row as legitimate or phishing. Drop a file in to score it, or
+    kick off a full retrain on the right.
+  </p>
+
+  <div class="flow" aria-hidden="true">
+    <span class="node">csv</span><span class="wire"></span>
+    <span class="node">ingest</span><span class="wire"></span>
+    <span class="node">validate</span><span class="wire"></span>
+    <span class="node">transform</span><span class="wire"></span>
+    <span class="node on">predict</span>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3><span class="idx">01</span> Score a CSV</h3>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".csv">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <p id="dzText">Drag a .csv file here, or click to browse</p>
+        <div class="filename" id="fileName"></div>
+      </label>
+      <div class="row">
+        <button type="button" class="primary" id="predictBtn" disabled>Run prediction →</button>
+        <a href="#" class="btn ghost" id="openTabLink" style="display:none;">Open full results ↗</a>
+      </div>
+      <div class="status busy" id="predictStatus"><span class="spinner"></span> scoring rows…</div>
+      <div class="status err" id="predictErr"></div>
+
+      <div id="resultWrap">
+        <h4>Preview — first rows</h4>
+        <div class="table-scroll"><div id="resultTable"></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="idx">02</span> Model status</h3>
+      <div class="metric"><div class="k">Endpoint</div><div class="v">GET /train</div></div>
+      <div class="metric"><div class="k">Pipeline</div><div class="v">ingestion → validation → transform → train</div></div>
+      <div class="metric"><div class="k">Last action</div><div class="v accent" id="lastAction">idle</div></div>
+      <div class="row">
+        <button type="button" class="ghost" id="trainBtn" style="flex:1; justify-content:center;">Retrain model</button>
+      </div>
+      <div class="status busy" id="trainStatus"><span class="spinner"></span> training — this can take a few minutes…</div>
+      <div class="status ok" id="trainOk"></div>
+      <div class="status err" id="trainErr"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span>networksecurity · fastapi + sklearn</span>
+  <span id="clock"></span>
+</footer>
+
+<script>
+  // clock
+  const clock = document.getElementById('clock');
+  const tick = () => clock.textContent = new Date().toLocaleTimeString();
+  tick(); setInterval(tick, 1000);
+
+  // dropzone
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileName = document.getElementById('fileName');
+  const dzText = document.getElementById('dzText');
+  const predictBtn = document.getElementById('predictBtn');
+  let selectedFile = null;
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+      selectedFile = fileInput.files[0];
+      fileName.textContent = selectedFile.name;
+      dzText.textContent = "File ready — click below to run:";
+      predictBtn.disabled = false;
+    }
+  });
+  ['dragenter','dragover'].forEach(evt =>
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt =>
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change'));
+    }
+  });
+
+  // predict
+  const predictStatus = document.getElementById('predictStatus');
+  const predictErr = document.getElementById('predictErr');
+  const resultWrap = document.getElementById('resultWrap');
+  const resultTable = document.getElementById('resultTable');
+  const openTabLink = document.getElementById('openTabLink');
+
+  predictBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    predictStatus.classList.add('show');
+    predictErr.classList.remove('show');
+    resultWrap.classList.remove('show');
+    predictBtn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/predict', { method: 'POST', body: fd });
+      const html = await res.text();
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+
+      // pull the table out of the returned full HTML page
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const table = doc.querySelector('table');
+      if (table) {
+        table.classList.add('result-table');
+        resultTable.innerHTML = '';
+        resultTable.appendChild(table);
+        resultWrap.classList.add('show');
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      openTabLink.href = URL.createObjectURL(blob);
+      openTabLink.style.display = 'inline-flex';
+    } catch (err) {
+      predictErr.textContent = '✕ ' + err.message + ' — check the terminal running app.py for details.';
+      predictErr.classList.add('show');
+    } finally {
+      predictStatus.classList.remove('show');
+      predictBtn.disabled = false;
+    }
+  });
+
+  // train
+  const trainBtn = document.getElementById('trainBtn');
+  const trainStatus = document.getElementById('trainStatus');
+  const trainOk = document.getElementById('trainOk');
+  const trainErr = document.getElementById('trainErr');
+  const lastAction = document.getElementById('lastAction');
+  const trainLink = document.getElementById('trainLink');
+
+  async function runTrain() {
+    trainStatus.classList.add('show');
+    trainOk.classList.remove('show');
+    trainErr.classList.remove('show');
+    trainBtn.disabled = true;
+    lastAction.textContent = 'training…';
+
+    try {
+      const res = await fetch('/train');
+      const text = await res.text();
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      trainOk.textContent = '✓ ' + text;
+      trainOk.classList.add('show');
+      lastAction.textContent = 'training complete';
+    } catch (err) {
+      trainErr.textContent = '✕ ' + err.message + ' — check the terminal for the traceback.';
+      trainErr.classList.add('show');
+      lastAction.textContent = 'training failed';
+    } finally {
+      trainStatus.classList.remove('show');
+      trainBtn.disabled = false;
+    }
+  }
+  trainBtn.addEventListener('click', runTrain);
+  trainLink.addEventListener('click', e => { e.preventDefault(); runTrain(); });
+</script>
+</body>
+</html>
