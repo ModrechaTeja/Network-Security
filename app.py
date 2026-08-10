@@ -1,5 +1,7 @@
 import sys
 import os
+import re
+from urllib.parse import urlparse
 
 import certifi
 ca = certifi.where()
@@ -7,22 +9,23 @@ ca = certifi.where()
 from dotenv import load_dotenv
 load_dotenv()
 mongo_db_url = os.getenv("MONGODB_URL_KEY")
-
+print(mongo_db_url)
 import pymongo
 from networksecurity.exception.exception import NetworkSecurityException
 from networksecurity.logging.logger import logging
 from networksecurity.pipeline.training_pipeline import TrainingPipeline
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, File, UploadFile,Request
+from fastapi import FastAPI, File, UploadFile,Request, Form
 from uvicorn import run as app_run
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from starlette.responses import RedirectResponse
 import pandas as pd
 
 from networksecurity.utils.main_utils.utils import load_object
 
 from networksecurity.utils.ml_utils.model.estimator import NetworkModel
+from networksecurity.utils.ml_utils.feature_extraction.url_feature_extractor import URLFeatureExtractor, FEATURE_ORDER
 
 
 client = pymongo.MongoClient(mongo_db_url, tlsCAFile=ca)
@@ -60,6 +63,42 @@ async def train_route():
     except Exception as e:
         raise NetworkSecurityException(e,sys)
     
+@app.post("/predict-url")
+async def predict_url_route(request: Request, url: str = Form(...)):
+    try:
+        url = (url or "").strip()
+        if not url:
+            return JSONResponse({"error": "Please enter a URL."}, status_code=400)
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
+            url = "http://" + url
+        parsed_check = urlparse(url)
+        if not parsed_check.hostname or "." not in parsed_check.hostname:
+            return JSONResponse({"error": "That doesn't look like a valid URL."}, status_code=400)
+
+        extractor = URLFeatureExtractor()
+        features, warnings = extractor.extract_features(url)
+
+        feature_df = pd.DataFrame([features], columns=FEATURE_ORDER)
+
+        preprocesor = load_object("final_model/preprocessor.pkl")
+        final_model = load_object("final_model/model.pkl")
+        network_model = NetworkModel(preprocessor=preprocesor, model=final_model)
+
+        y_pred = network_model.predict(feature_df)
+        raw_pred = int(y_pred[0])
+        verdict = "Legitimate" if raw_pred == 1 else "Phishing"
+
+        return JSONResponse({
+            "url": url,
+            "verdict": verdict,
+            "raw_prediction": raw_pred,
+            "features": features,
+            "warnings": warnings,
+        })
+    except Exception as e:
+        raise NetworkSecurityException(e, sys)
+
+
 @app.post("/predict")
 async def predict_route(request: Request,file: UploadFile = File(...)):
     try:
