@@ -1,50 +1,60 @@
-# Network Security - Phishing URL Classification
+# NetworkSecurity — Phishing URL Detection
 
-An end-to-end machine learning and MLOps project for classifying URLs as
-**phishing or legitimate** using extracted URL-based features.
+An end-to-end ML system that classifies URLs as **phishing** or **legitimate**,
+with a FastAPI dashboard supporting both single-URL and batch CSV prediction.
 
-The project implements a modular machine learning pipeline covering data
-ingestion, data validation, data transformation, model training, evaluation,
-and batch prediction through a FastAPI web application.
+## Pipeline
 
----
+```
+MongoDB → Data Ingestion → Data Validation → Data Transformation
+   → Model Training (5 algorithms, GridSearchCV) → Best Model
+   → model.pkl + preprocessor.pkl → FastAPI App
+```
 
-## Project Overview
+## Features
 
-The system takes a dataset containing extracted URL features, trains multiple
-classification models, performs hyperparameter tuning, and selects the
-best-performing model for prediction.
+- **Single URL check** (`POST /predict-url`) — paste a live URL, get an instant
+  verdict. Features are computed live from URL parsing, DNS/WHOIS, and page
+  content. A few legacy signals (Alexa Rank, Google's old PageRank API) no
+  longer have a live data source — these are clearly flagged, not faked.
+- **Batch CSV prediction** (`POST /predict`) — upload a CSV of pre-extracted
+  features and score every row.
+- **Retrain endpoint** (`GET /train`) — re-runs the full pipeline.
 
-The trained model is integrated with a FastAPI application that allows users
-to upload a CSV file and obtain predictions for multiple URL records.
+## Tech Stack
 
-## Technologies Used
+Python · scikit-learn · Pandas/NumPy · MongoDB · FastAPI · MLflow · DagsHub · BeautifulSoup · Requests · WHOIS · DNS · Docker
 
-- **Python** - Core programming language
-- **Scikit-learn** - Machine learning models, preprocessing, and GridSearchCV
-- **Pandas & NumPy** - Data processing and numerical operations
-- **MongoDB** - Data storage and data ingestion
-- **FastAPI** - Prediction API and web application
-- **MLflow & DagsHub** - Experiment tracking
-- **Docker** - Containerization
-- **HTML, CSS & JavaScript** - Custom web dashboard
-- **Git & GitHub** - Version control
+## Project Structure
 
-### ML Pipeline
+```
+networksecurity/
+├── components/         # ingestion, validation, transformation, training
+├── pipeline/            # training_pipeline.py
+├── utils/ml_utils/
+│   ├── model/            # NetworkModel wrapper
+│   └── feature_extraction/  # url_feature_extractor.py
+app.py                   # FastAPI app
+main.py                  # standalone training run
+templates/                # dashboard UI
+final_model/              # trained model.pkl + preprocessor.pkl
+```
 
-```text
-MongoDB
-   ↓
-Data Ingestion
-   ↓
-Data Validation
-   ↓
-Data Transformation
-   ↓
-Model Training & Hyperparameter Tuning
-   ↓
-Model Evaluation
-   ↓
-Best Model
-   ↓
-FastAPI Batch Prediction
+## Run Locally
+
+```bash
+pip install -r requirements.txt
+pip install -e .
+python push_data.py   # one-time: load CSV into MongoDB
+python main.py         # train model
+python app.py           # start dashboard at http://127.0.0.1:8000
+```
+
+## Notes
+
+- MLflow/DagsHub tracking is implemented and has been tested successfully, but is disabled by default to keep local execution lightweight and avoid unnecessary remote tracking overhead.
+- AWS S3 synchronization code is included but disabled because cloud deployment is not currently configured.
+
+
+## The dashboard will be available at:
+http://127.0.0.1:8000
