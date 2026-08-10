@@ -123,14 +123,21 @@ class ModelTrainer:
 
         classification_train_metric=get_classification_score(y_true=y_train,y_pred=y_train_pred)
         
-        ## Track the experiements with mlflow
-        # self.track_mlflow(best_model,classification_train_metric)
 
+        # MLflow/DagsHub experiment tracking
+        # Successfully tested and configured, but disabled by default
+        # to reduce execution time. Uncomment when remote tracking is needed.
+        # self.track_mlflow(best_model, classification_train_metric)
+        
 
         y_test_pred=best_model.predict(x_test)
         classification_test_metric=get_classification_score(y_true=y_test,y_pred=y_test_pred)
 
-        # self.track_mlflow(best_model,classification_test_metric)
+      
+        # MLflow/DagsHub experiment tracking
+        # Disabled by default to reduce local execution time.
+        # Enable when remote experiment tracking is required.
+        # self.track_mlflow(best_model, classification_test_metric)
 
         preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
             

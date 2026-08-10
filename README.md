@@ -1,29 +1,50 @@
-### Network Security Projects For Phising Data
+# Network Security - Phishing URL Classification
 
-Setup github secrets:
-AWS_ACCESS_KEY_ID=
+An end-to-end machine learning and MLOps project for classifying URLs as
+**phishing or legitimate** using extracted URL-based features.
 
-AWS_SECRET_ACCESS_KEY=
+The project implements a modular machine learning pipeline covering data
+ingestion, data validation, data transformation, model training, evaluation,
+and batch prediction through a FastAPI web application.
 
-AWS_REGION = us-east-1
+---
 
-AWS_ECR_LOGIN_URI = 788614365622.dkr.ecr.us-east-1.amazonaws.com/networkssecurity
-ECR_REPOSITORY_NAME = networkssecurity
+## Project Overview
 
+The system takes a dataset containing extracted URL features, trains multiple
+classification models, performs hyperparameter tuning, and selects the
+best-performing model for prediction.
 
-Docker Setup In EC2 commands to be Executed
-#optinal
+The trained model is integrated with a FastAPI application that allows users
+to upload a CSV file and obtain predictions for multiple URL records.
 
-sudo apt-get update -y
+## Technologies Used
 
-sudo apt-get upgrade
+- **Python** - Core programming language
+- **Scikit-learn** - Machine learning models, preprocessing, and GridSearchCV
+- **Pandas & NumPy** - Data processing and numerical operations
+- **MongoDB** - Data storage and data ingestion
+- **FastAPI** - Prediction API and web application
+- **MLflow & DagsHub** - Experiment tracking
+- **Docker** - Containerization
+- **HTML, CSS & JavaScript** - Custom web dashboard
+- **Git & GitHub** - Version control
 
-#required
+### ML Pipeline
 
-curl -fsSL https://get.docker.com -o get-docker.sh
-
-sudo sh get-docker.sh
-
-sudo usermod -aG docker ubuntu
-
-newgrp docker
+```text
+MongoDB
+   ↓
+Data Ingestion
+   ↓
+Data Validation
+   ↓
+Data Transformation
+   ↓
+Model Training & Hyperparameter Tuning
+   ↓
+Model Evaluation
+   ↓
+Best Model
+   ↓
+FastAPI Batch Prediction
